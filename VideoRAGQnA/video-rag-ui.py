@@ -7,8 +7,10 @@ import torch
 import torch
 import streamlit as st
 #from transformers import AutoTokenizer
-from transformers import LlamaTokenizer, AutoModelForCausalLM, TextIteratorStreamer
-from transformers import set_seed
+#from transformers import LlamaTokenizer, AutoModelForCausalLM, TextIteratorStreamer
+from ipex_llm.transformers import AutoModel, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoProcessor, set_seed
+
 import argparse
 
 from typing import Any, List, Mapping, Optional
@@ -18,16 +20,16 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.llms.base import LLM
 import threading
 from utils import config_reader as reader
-HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN", "")
-from embedding.extract_vl_embedding import VLEmbeddingExtractor as VL
+#HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN", "")
+#from embedding.extract_vl_embedding import VLEmbeddingExtractor as VL
 from embedding.generate_store_embeddings import setup_meanclip_model 
-from embedding.video_llama.common.config import Config
-from embedding.video_llama.common.registry import registry
-from embedding.video_llama.conversation.conversation_video import Chat, Conversation, default_conversation,SeparatorStyle,conv_llava_llama_2
+#from embedding.video_llama.common.config import Config
+#from embedding.video_llama.common.registry import registry
+#from embedding.video_llama.conversation.conversation_video import Chat, Conversation, default_conversation,SeparatorStyle,conv_llava_llama_2
 import decord
-decord.bridge.set_bridge('torch')
-
-
+from decord import VideoReader, cpu
+import numpy as np
+from PIL import Image
 
 instructions = [
     """ Identify the person [with specific features / seen at a specific location / performing a specific action] in the provided data based on the video content. 
@@ -116,24 +118,38 @@ def load_models():
     #model = AutoModelForCausalLM.from_pretrained(
     #    model_path, torch_dtype=torch.float32, device_map=device, trust_remote_code=True, token=HUGGINGFACEHUB_API_TOKEN
     #)
+    model_hub = 'huggingface'    
+    model = AutoModel.from_pretrained(model_path, 
+                                      load_in_low_bit="sym_int4",
+                                      optimize_model=True,
+                                      trust_remote_code=True,
+                                      use_cache=True,
+                                      modules_to_not_convert=["vpm", "resampler"],
+                                      model_hub=model_hub)
 
+    tokenizer = AutoTokenizer.from_pretrained(model_path,
+                                              trust_remote_code=True)    
+    #video_llama=None
+    #streamer=None
     #tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, token=HUGGINGFACEHUB_API_TOKEN)
     #tokenizer.padding_size = 'right'
 
     # Load video-llama model
-    video_llama = VL(**config['vl_branch'])
-    tokenizer = video_llama.model.llama_tokenizer
+    #video_llama = VL(**config['vl_branch'])
+    #tokenizer = video_llama.model.llama_tokenizer
     
-    streamer = TextIteratorStreamer(tokenizer, skip_prompt=True)
+    #streamer = TextIteratorStreamer(tokenizer, skip_prompt=True)
+    video_minicpm = model.half().to('xpu')
     
-    return video_llama, tokenizer, streamer
+    return video_minicpm, tokenizer
 
-video_llama, tokenizer, streamer = load_models()
-vis_processor_cfg = video_llama.cfg.datasets_cfg.webvid.vis_processor.train
-vis_processor = registry.get_processor_class(vis_processor_cfg.name).from_config(vis_processor_cfg)
+video_minicpm, tokenizer = load_models()
+#vis_processor_cfg = video_llama.cfg.datasets_cfg.webvid.vis_processor.train
+#vis_processor = registry.get_processor_class(vis_processor_cfg.name).from_config(vis_processor_cfg)
+
 print("-"*30)
 print("initializing model")
-chat = Chat(video_llama.model, vis_processor, device=device)
+chat_messages = []
 
 def chat_reset(chat_state, img_list):
     print("-"*30)
@@ -143,33 +159,142 @@ def chat_reset(chat_state, img_list):
     if img_list is not None:
         img_list = []
     return chat_state, img_list
+    
+def load_video(video_path, start_time=0, duration=-1, n_frms=8, height=-1, width=-1, sampling="uniform", return_msg = False, augment = False):
+    #decord.bridge.set_bridge("torch")
+    vr = VideoReader(uri=video_path, height=height, width=width)
+    fps = vr.get_avg_fps()
+    vlen = len(vr)
+    start, end = int(fps*start_time), min(vlen, int(fps*(start_time+duration))) if duration != -1 else vlen
+    dur = min(vlen/fps,duration) if duration != -1 else vlen/fps
+
+    n_frms = min(n_frms, vlen)
+
+    if sampling == "uniform":
+        indices = np.arange(start, end, (end-start)/n_frms).astype(int).tolist()
+    elif sampling == "headtail":
+        indices_h = sorted(rnd.sample(range(dur*fps // 2), n_frms // 2))
+        indices_t = sorted(rnd.sample(range(dur*fps // 2, dur*fps), n_frms // 2))
+        indices = indices_h + indices_t
+    else:
+        raise NotImplementedError
+
+    # get_batch -> T, H, W, C
+    temp_frms = vr.get_batch(indices).asnumpy()
+    # print(type(temp_frms))
+    # Perform Augmentation
+    if augment:
+        vra = VideoRandomAugment()
+        temp_frms = vra(temp_frms)
+    tensor_frms = torch.from_numpy(temp_frms) if type(temp_frms) is not torch.Tensor else temp_frms
+    frms = tensor_frms.permute(3, 0, 1, 2).float()  # (C, T, H, W)
+
+    if not return_msg:
+        return frms
+
+    sec = ", ".join([str(round(f / fps, 1)) for f in indices])
+    # " " should be added in the start and end
+    #msg = f"The video contains {len(indices)} frames sampled at {sec} seconds. "
+    msg = f"The video is {dur:.2f} seconds long at {fps:.2f} FPS and {len(indices)} frames are sampled. "
+    return frms, msg
+    
+def load_video_PIL(video_path, start_time=0, duration=-1, n_frms=8, height=-1, width=-1, sampling="uniform", return_msg = False, augment = False):
+    #decord.bridge.set_bridge("torch")
+    vr = VideoReader(uri=video_path, height=height, width=width)
+    fps = vr.get_avg_fps()
+    vlen = len(vr)
+    start, end = int(fps*start_time), min(vlen, int(fps*(start_time+duration))) if duration != -1 else vlen
+    dur = min(vlen/fps,duration) if duration != -1 else vlen/fps
+
+    n_frms = min(n_frms, vlen)
+
+    if sampling == "uniform":
+        indices = np.arange(start, end, (end-start)/n_frms).astype(int).tolist()
+    elif sampling == "headtail":
+        indices_h = sorted(rnd.sample(range(dur*fps // 2), n_frms // 2))
+        indices_t = sorted(rnd.sample(range(dur*fps // 2, dur*fps), n_frms // 2))
+        indices = indices_h + indices_t
+    else:
+        raise NotImplementedError
+
+    # get_batch -> T, H, W, C
+    frames = vr.get_batch(indices).asnumpy()
+
+    frames = [Image.fromarray(v.astype('uint8')) for v in frames]
+    print('num frames:', len(frames))
+
+    if not return_msg:
+        return frames
+
+    sec = ", ".join([str(round(f / fps, 1)) for f in indices])
+    # " " should be added in the start and end
+    #msg = f"The video contains {len(indices)} frames sampled at {sec} seconds. "
+    msg = f"The video is {dur:.2f} seconds long at {fps:.2f} FPS and {len(indices)} frames are sampled. "
+    return frames, msg      
 
 class VideoLLM(LLM):
-        
+    model: Optional[object] = None 
+    tokenizer: Optional[object] = None   
+            
     @torch.inference_mode()
     def _call(
             self, 
             video_path,
             text_input,
-            chat,
+            messages, # dict object that hold chat history
             start_time,
             duration,
-            streamer = None,  # Add streamer as an argument
+            #f_stream,  # Add streamer as an argument (Boolean)
+            **kwargs
+            
         ):
         
+        params={}
+        params["use_image_id"] = False
+        params["max_slice_nums"] = 2 # use 1 if cuda OOM and video resolution >  448*448
         
-        chat.upload_video_without_audio(video_path, start_time, duration)
-        chat.ask(text_input)#, chat_state)
-        #answer = chat.answer(chat_state, img_list, max_new_tokens=300, num_beams=1, min_length=1, top_p=0.9, repetition_penalty=1.0, length_penalty=1, temperature=0.1, max_length=2000, keep_conv_hist=True, streamer=streamer)
-        answer = chat.answer(max_new_tokens=150, num_beams=1, min_length=1, top_p=0.9, repetition_penalty=1.0, length_penalty=1, temperature=0.02, max_length=2000, keep_conv_hist=True, streamer=streamer)
+        for k,v in kwargs.items():
+          params[k]=v
 
-    def stream_res(self, video_path, text_input, chat, start_time, duration):
-        #thread = threading.Thread(target=self._call, args=(video_path, text_input, chat, chat_state, img_list, streamer))  # Pass streamer to _call
-        thread = threading.Thread(target=self._call, args=(video_path, text_input, chat, start_time, duration, streamer))  # Pass streamer to _call
-        thread.start()
+        if video_path or video_path != "":                
+           video_frames, msg = load_video_PIL(
+                video_path=video_path, start_time=start_time, duration=duration,
+                n_frms=8,
+                height=-1,
+                width=-1,
+                sampling ="uniform", return_msg = True
+           )
+           print(f"message: {msg}")
+        else:
+           video_frames=[]
+           msg=""
         
-        for text in streamer:
-            yield text
+        global chat_messages
+        chat_messages = messages # initialize chat_message with old chat history
+        
+        chat_messages.append({'role': 'user', 'content': video_frames + [text_input]})
+        
+        res = self.model.chat(
+            image=None,
+            msgs=chat_messages,
+            tokenizer=self.tokenizer,
+            **params
+        )
+        
+        return res
+        #chat = None 
+        #chat.upload_video_without_audio(video_path, start_time, duration)
+        #chat.ask(text_input)#, chat_state)
+        #answer = chat.answer(chat_state, img_list, max_new_tokens=300, num_beams=1, min_length=1, top_p=0.9, repetition_penalty=1.0, length_penalty=1, temperature=0.1, max_length=2000, keep_conv_hist=True, streamer=streamer)
+        #answer = chat.answer(max_new_tokens=150, num_beams=1, min_length=1, top_p=0.9, repetition_penalty=1.0, length_penalty=1, temperature=0.02, max_length=2000, keep_conv_hist=True, streamer=streamer)
+
+    #def stream_res(self, video_path, text_input, chat, start_time, duration):
+    #    #thread = threading.Thread(target=self._call, args=(video_path, text_input, chat, chat_state, img_list, streamer))  # Pass streamer to _call
+    #    thread = threading.Thread(target=self._call, args=(video_path, text_input, chat, start_time, duration, streamer))  # Pass streamer to _call
+    #    thread.start()
+    #    
+    #    for text in streamer:
+    #        yield text
 
     @property
     def _identifying_params(self) -> Mapping[str, Any]:
@@ -203,7 +328,7 @@ if 'llm' not in st.session_state.keys():
             st.session_state['llm'] = CustomLLM()
         elif config['embeddings']['type'] == "video":
             print("Loading VideoLLM . . .")
-            st.session_state['llm'] = VideoLLM()
+            st.session_state['llm'] = VideoLLM(model=video_minicpm, tokenizer=tokenizer)
         else:
             print("ERROR: line 240")
         
@@ -233,9 +358,11 @@ if "messages" not in st.session_state.keys():
     st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
         
 def clear_chat_history():
+    global chat_messages
+    chat_messages=[]
     st.session_state.example_video = 'Enter Text'
     st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
-    chat.clear()
+    #chat.clear()
         
 def RAG(prompt):
     
@@ -272,6 +399,7 @@ if 'qcnt' not in st.session_state.keys():
 def handle_message():
     print("-"*30)
     print("starting message handling")
+    global chat_messages
     # Generate a new response if last message is not from assistant
     if st.session_state.messages[-1]["role"] != "assistant":
         # Handle user messages here
@@ -301,7 +429,20 @@ def handle_message():
                 instruction = f"Instruction: {get_context(prompt)[0]}\nQuestion: {prompt}"
                 #instruction = f"Instruction: Describe the video content according to the user's question only if it includes the answer for the user's query. Otherwise, generate exactly:\'No related videos found in the database.\' and stop generating.\n User's question: {prompt}"
                 #for new_text in st.session_state.llm.stream_res(formatted_prompt):
-                for new_text in st.session_state.llm.stream_res(video_path, instruction, chat, playback_offset, config['clip_duration']):
+                generator = st.session_state.llm._call( video_path, 
+                                                        instruction,
+                                                        chat_messages,
+                                                        playback_offset,
+                                                        config['clip_duration'],
+                                                        max_new_tokens=256,
+                                                        sampling=True,
+                                                        stream=True
+                                                      )
+                                                            
+                if torch.xpu.is_available():
+                  torch.xpu.synchronize()
+                                                                              
+                for new_text in generator:
                     full_response += new_text
                     placeholder.markdown(full_response)
 

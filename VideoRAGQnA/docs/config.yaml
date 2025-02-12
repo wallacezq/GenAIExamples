@@ -25,5 +25,8 @@ vector_db:
 
 meanclip_cfg_path: embedding/meanclip_config/clip_meanAgg.json
 
-# LLM path
-model_path: meta-llama/Llama-2-7b-chat-hf
+# LVM path
+model_path: openbmb/MiniCPM-V-2_6
+
+#meta-llama/Llama-2-7b-chat-hf
+

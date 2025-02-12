@@ -148,7 +148,7 @@ def main():
 
     # Create argument parser
     parser = argparse.ArgumentParser(description='Process configuration file for generating and storing embeddings.')
-    parser.add_argument('config_file', type=str, help='Path to configuration file (e.g., config.yaml)')
+    parser.add_argument('--config_file', type=str, help='Path to configuration file (e.g., config.yaml)')
 
     # Parse command-line arguments
     args = parser.parse_args()

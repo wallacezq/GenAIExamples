@@ -121,10 +121,15 @@ class MeanCLIPEmbeddings(BaseModel, Embeddings):
 
         # preprocess images
         clip_preprocess = get_transforms("clip", max_img_size)
-        temp_frms = vr.get_batch(frame_idx.astype(int).tolist())
+        temp_frms = vr.get_batch(frame_idx.astype(int).tolist()).asnumpy()
+        
+        #print(f"frame_id: {frame_idx.astype(int).tolist()}")
+        #print(f"temp_frms: {temp_frms}")
         for idx in range(temp_frms.shape[0]):
             im = temp_frms[idx] # H W C
-            clip_images.append(clip_preprocess(toPIL(im.permute(2,0,1)))) # 3, 224, 224  as input to append
+            #print(f"im: {temp_frms.shape}")
+            #clip_images.append(clip_preprocess(toPIL(im.transpose(2,0,1)))) # 3, 224, 224  as input to append
+            clip_images.append(clip_preprocess(toPIL(im)))
         clip_images_tensor = torch.zeros((num_frm,) + clip_images[0].shape)
         clip_images_tensor[:num_frm] = torch.stack(clip_images)
 
