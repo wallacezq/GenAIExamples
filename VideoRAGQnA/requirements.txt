@@ -1,0 +1,27 @@
+--extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
+
+dateparser==1.2.1
+decord==0.6.0
+einops==0.8.1
+ftfy==6.3.1
+ipex_llm==2.2.0b20250119
+langchain==0.3.18
+langchain_community==0.3.17
+langchain_core==0.3.35
+matplotlib==3.10.0
+numpy==2.2.2
+opencv_python==4.11.0.86
+opencv_python_headless==4.11.0.86
+Pillow==11.1.0
+pytorchvideo==0.1.5
+PyYAML==6.0.2
+streamlit==1.41.1
+torch==2.3.1+cxx11.abi
+torchaudio==2.5.1+cxx11.abi
+torchvision==0.18.1+cxx11.abi
+tqdm
+transformers==4.44.2
+tzlocal
+Requests==2.32.3
+bigdl-core-xe-addons-23=2.6.0b20250110
+
