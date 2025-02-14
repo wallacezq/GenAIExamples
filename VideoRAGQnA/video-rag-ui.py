@@ -439,7 +439,7 @@ def handle_message():
                                                         max_new_tokens=256,
                                                         sampling=True,
                                                         stream=True,
-                                                        system_prompt="You are an AI assistant specializes in monitoring live or recorded security camera footage, identifying suspicious behaviors or actions that could indicate a theft attempt, and then alerting users in real-time with potential theft situations."
+                                                        system_prompt=config['system_prompt']
                                                       )
                                                             
                 if torch.xpu.is_available():

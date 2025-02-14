@@ -27,6 +27,7 @@ meanclip_cfg_path: embedding/meanclip_config/clip_meanAgg.json
 
 # LVM path
 model_path: openbmb/MiniCPM-V-2_6
+system_prompt: "You are an AI assistant specializes in monitoring live or recorded security camera footage, identifying suspicious behaviors or actions that could indicate a theft attempt, and then alerting users in real-time with potential theft situations."
 
 #meta-llama/Llama-2-7b-chat-hf
 
