@@ -95,7 +95,9 @@ if not os.path.exists(os.path.join(config['meta_output_dir'], "metadata.json")):
     vs = main()
 st.set_page_config(initial_sidebar_state='collapsed', layout='wide')
 
-st.title("Video RAG")
+logo_path = 'intel-logo-0.png'
+st.logo(logo_path)
+st.title("Advanced Video Retrieval System")
 
 title_alignment="""
 <style>
@@ -436,7 +438,8 @@ def handle_message():
                                                         config['clip_duration'],
                                                         max_new_tokens=256,
                                                         sampling=True,
-                                                        stream=True
+                                                        stream=True,
+                                                        system_prompt="You are an AI assistant specializes in monitoring live or recorded security camera footage, identifying suspicious behaviors or actions that could indicate a theft attempt, and then alerting users in real-time with potential theft situations."
                                                       )
                                                             
                 if torch.xpu.is_available():
