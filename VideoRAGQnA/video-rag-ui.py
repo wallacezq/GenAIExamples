@@ -31,6 +31,9 @@ from decord import VideoReader, cpu
 import numpy as np
 from PIL import Image
 
+SAVED_MODEL_PATH = "./save_quantized_model"
+LVM_MODEL_PATH = "openbmb/MiniCPM-V-2_6"
+
 instructions = [
     """ Identify the person [with specific features / seen at a specific location / performing a specific action] in the provided data based on the video content. 
     Describe in detail the relevant actions of the individuals mentioned in the question. 
@@ -70,11 +73,8 @@ instructions = [
     Do not give repetitions, always give distinct and accurate information only."""
 ]
 
-
 # Embeddings
 HFembeddings = HuggingFaceEmbeddings(model_kwargs = {'device': 'cpu'})
-
-
 
 hf_db = FAISS.from_texts(instructions, HFembeddings)
 
@@ -116,38 +116,42 @@ st.markdown(title_alignment, unsafe_allow_html=True)
 @st.cache_resource       
 def load_models():
     print("loading in model")
-    #print("HF Token: ", HUGGINGFACEHUB_API_TOKEN)
-    #model = AutoModelForCausalLM.from_pretrained(
-    #    model_path, torch_dtype=torch.float32, device_map=device, trust_remote_code=True, token=HUGGINGFACEHUB_API_TOKEN
-    #)
-    model_hub = 'huggingface'    
-    model = AutoModel.from_pretrained(model_path, 
+    processor = None
+    if not os.path.exists(SAVED_MODEL_PATH):
+       model = AutoModel.from_pretrained(LVM_MODEL_PATH, 
                                       load_in_low_bit="sym_int4",
                                       optimize_model=True,
                                       trust_remote_code=True,
                                       use_cache=True,
                                       modules_to_not_convert=["vpm", "resampler"],
-                                      model_hub=model_hub)
+                                      model_hub='huggingface')
 
-    tokenizer = AutoTokenizer.from_pretrained(model_path,
-                                              trust_remote_code=True)    
-    #video_llama=None
-    #streamer=None
-    #tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, token=HUGGINGFACEHUB_API_TOKEN)
-    #tokenizer.padding_size = 'right'
-
-    # Load video-llama model
-    #video_llama = VL(**config['vl_branch'])
-    #tokenizer = video_llama.model.llama_tokenizer
+       tokenizer = AutoTokenizer.from_pretrained(LVM_MODEL_PATH,
+                                              trust_remote_code=True)
+    else:
+        model = AutoModel.load_low_bit(SAVED_MODEL_PATH, 
+                                       optimize_model=True,
+                                       trust_remote_code=True,
+                                       use_cache=True,
+                                       modules_to_not_convert=["vpm", "resampler"])
+        tokenizer = AutoTokenizer.from_pretrained(SAVED_MODEL_PATH,
+                                                  trust_remote_code=True)
+        processor = AutoProcessor.from_pretrained(LVM_MODEL_PATH,
+                                                trust_remote_code=True)                                                  
+    model.eval()
     
-    #streamer = TextIteratorStreamer(tokenizer, skip_prompt=True)
+    if not os.path.exists(SAVED_MODEL_PATH):
+        processor = AutoProcessor.from_pretrained(LVM_MODEL_PATH,
+                                                trust_remote_code=True)
+        model.save_low_bit(SAVED_MODEL_PATH)
+        tokenizer.save_pretrained(SAVED_MODEL_PATH)
+        processor.save_pretrained(SAVED_MODEL_PATH)
+        
     video_minicpm = model.half().to('xpu')
     
-    return video_minicpm, tokenizer
+    return video_minicpm, tokenizer, processor
 
-video_minicpm, tokenizer = load_models()
-#vis_processor_cfg = video_llama.cfg.datasets_cfg.webvid.vis_processor.train
-#vis_processor = registry.get_processor_class(vis_processor_cfg.name).from_config(vis_processor_cfg)
+video_minicpm, tokenizer, minicpm_processor = load_models()
 
 print("-"*30)
 print("initializing model")
@@ -235,9 +239,10 @@ def load_video_PIL(video_path, start_time=0, duration=-1, n_frms=8, height=-1, w
     return frames, msg      
 
 class VideoLLM(LLM):
-    model: Optional[object] = None 
-    tokenizer: Optional[object] = None   
-            
+    model: Optional[object] = None
+    tokenizer: Optional[object] = None
+    processor: Optional[object] = None
+    
     @torch.inference_mode()
     def _call(
             self, 
@@ -276,6 +281,9 @@ class VideoLLM(LLM):
         
         chat_messages.append({'role': 'user', 'content': video_frames + [text_input]})
         
+        if self.processor:
+           processor = self.processor
+           
         res = self.model.chat(
             image=None,
             msgs=chat_messages,
@@ -330,7 +338,7 @@ if 'llm' not in st.session_state.keys():
             st.session_state['llm'] = CustomLLM()
         elif config['embeddings']['type'] == "video":
             print("Loading VideoLLM . . .")
-            st.session_state['llm'] = VideoLLM(model=video_minicpm, tokenizer=tokenizer)
+            st.session_state['llm'] = VideoLLM(model=video_minicpm, tokenizer=tokenizer, processor=minicpm_processor)
         else:
             print("ERROR: line 240")
         

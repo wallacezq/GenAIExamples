@@ -9,7 +9,7 @@ langchain==0.3.18
 langchain_community==0.3.17
 langchain_core==0.3.35
 matplotlib==3.10.0
-numpy==2.2.2
+numpy<=1.26.4
 opencv_python==4.11.0.86
 opencv_python_headless==4.11.0.86
 Pillow==11.1.0
@@ -23,5 +23,5 @@ tqdm
 transformers==4.44.2
 tzlocal
 Requests==2.32.3
-bigdl-core-xe-addons-23=2.6.0b20250110
+bigdl-core-xe-addons-23
 
