@@ -78,7 +78,7 @@ huggingface-cli login
 6. Start VDMS server.
 
 ```bash
-docker run --rm --name vdms-rag -p 55555:55555 intellabs/vdms:latest
+docker run -d --name vdms-rag -p 55555:55555 intellabs/vdms:latest
 ```
 
 7. Run streamlit UI
