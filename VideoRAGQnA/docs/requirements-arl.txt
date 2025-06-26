@@ -1,0 +1,28 @@
+--extra-index-url https://pytorch-extension.intel.com/release-whl/stable/arl/us/torch
+packaging
+opencv-python
+accelerate==0.23.0
+open-clip-torch==2.24.0
+streamlit==1.37.0
+metafunctions
+sentence-transformers
+vdms
+tzlocal
+dateparser
+# video-llama requirements
+decord
+einops
+omegaconf
+pytorchvideo
+webdataset
+faiss-cpu
+langchain_community
+ipex-llm==2.3.0b20250625
+torch==2.6.0.post0+xpu               
+torchvision==0.21.0.post0+xpu
+torchaudio==2.6.0.post0+xpu
+bigdl-core-xe-all==2.7.0b20250625
+onednn-devel==2025.0.1
+onednn==2025.0.1
+dpcpp-cpp-rt==2025.0.2
+transformers==4.44.2
