@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 # Add the parent directory of the current script to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-VECTORDB_SERVICE_HOST_IP = os.getenv("VECTORDB_SERVICE_HOST_IP", "0.0.0.0")
+VECTORDB_SERVICE_HOST_IP = os.getenv("VECTORDB_SERVICE_HOST_IP", "127.0.0.1")
 
 
 # sys.path.append(os.path.abspath('../utils'))
@@ -144,7 +144,7 @@ def retrieval_testing(vs):
 def main():
     # read config yaml
     print ('Reading config file')
-    # config = reader.read_config('../docs/config.yaml')
+    config = reader.read_config('./docs/config.yaml')
 
     # Create argument parser
     parser = argparse.ArgumentParser(description='Process configuration file for generating and storing embeddings.')
@@ -153,7 +153,7 @@ def main():
     # Parse command-line arguments
     args = parser.parse_args()
     # Read configuration file
-    config = reader.read_config(args.config_file)
+    #config = reader.read_config(args.config_file)
     # Read MeanCLIP
     meanclip_cfg_json = json.load(open(config['meanclip_cfg_path'], 'r'))
     meanclip_cfg = argparse.Namespace(**meanclip_cfg_json)

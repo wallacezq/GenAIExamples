@@ -20,7 +20,7 @@ clip_duration: 10
 
 vector_db:
   choice_of_db: 'vdms' # #Supported databases [vdms]
-  host: 0.0.0.0
+  host: localhost
   port: 55555 
 
 meanclip_cfg_path: embedding/meanclip_config/clip_meanAgg.json

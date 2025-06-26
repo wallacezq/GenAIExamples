@@ -1,6 +1,7 @@
 from langchain_community.vectorstores import VDMS
 from langchain_community.vectorstores.vdms import VDMS_Client
-from langchain.pydantic_v1 import BaseModel, root_validator
+#from langchain.pydantic_v1 import BaseModel, root_validator
+from pydantic import BaseModel, root_validator
 from langchain_core.embeddings import Embeddings
 from decord import VideoReader, cpu
 import numpy as np
@@ -25,14 +26,14 @@ toPIL = T.ToPILImage()
 class MeanCLIPEmbeddings(BaseModel, Embeddings):
     """MeanCLIP Embeddings model."""
 
-    model: Any
-    preprocess: Any
-    tokenizer: Any
+    model: Any = None
+    preprocess: Any = None
+    tokenizer: Any = None
     # Select model: https://github.com/mlfoundations/open_clip
     model_name: str = "ViT-H-14"
     checkpoint: str = "laion2b_s32b_b79k"
 
-    @root_validator(allow_reuse=True)
+    @root_validator(allow_reuse=True, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that open_clip and torch libraries are installed."""
         try:
@@ -211,6 +212,7 @@ class VideoVS:
                     self.update_image_retriever = self.video_db.as_retriever(search_type=self.chosen_video_search_type, search_kwargs={'k':n_images, "filter":self.constraints})
 
         else:
+            self.constraints = None
             self.update_image_retriever = self.video_db.as_retriever(search_type=self.chosen_video_search_type, search_kwargs={'k':n_images})
     
     def MultiModalRetrieval(self, query: str, top_k: Optional[int] = 3):
