@@ -59,7 +59,7 @@ pip install -r docs/requirements.txt
 
 3. Get access to the following HuggingFace's Model
 
-- Get access to gated meta-llama repo by requesting access here: [openbmb/MiniCPM-V-2_6 · Hugging Face](https://huggingface.co/openbmb/MiniCPM-V-2_6) 
+- Get access to gated minicpm repo by requesting access here: [openbmb/MiniCPM-V-2_6 · Hugging Face](https://huggingface.co/openbmb/MiniCPM-V-2_6) 
 
 - Create HF access token by following these instructions: https://huggingface.co/docs/hub/en/security-tokens#how-to-manage-user-access-tokens.
 
