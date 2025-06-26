@@ -54,7 +54,8 @@ video_ingest/
 ```bash
 cd VideoRAGQnA
 conda create --name vrag python=3.11 libuv && conda activate vrag
-pip install -r docs/requirements.txt
+pip install -r docs/requirements.txt #(for platform < ARL)
+pip install -r docs/requirements-arl.txt #(for ARL-H platform)
 ```
 
 3. Get access to the following HuggingFace's Model
