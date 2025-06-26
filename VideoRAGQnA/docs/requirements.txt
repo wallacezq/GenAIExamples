@@ -1,6 +1,6 @@
-setuptools==69.5.1
+--extra-index-url https://download.pytorch.org/whl/xpu
 packaging
-opencv-python-headless
+opencv-python
 accelerate
 open-clip-torch==2.24.0
 streamlit==1.37.0
@@ -17,9 +17,10 @@ pytorchvideo
 webdataset
 faiss-cpu
 langchain_community
-torch==2.6.0+xpu --index-url https://download.pytorch.org/whl/xpu                           
-torchvision==0.21.0+xpu --index-url https://download.pytorch.org/whl/xpu
-torchaudio==2.6.0+xpu --index-url https://download.pytorch.org/whl/xpu
+ipex-llm==2.3.0b20250625
+torch==2.6.0+xpu               
+torchvision==0.21.0+xpu
+torchaudio==2.6.0+xpu
 bigdl-core-xe-all==2.7.0b20250625
 onednn-devel==2025.0.1
 onednn==2025.0.1
